@@ -1,21 +1,31 @@
-🌐 Cloud Cost Optimization for VR Assets
+# 🌐 Cloud Cost Optimization for VR Assets  
+**RGAC Virtual University – Hybrid Storage Strategy**  
 
-RGAC Virtual University – Hybrid Storage Strategy
+![Cost Savings](https://img.shields.io/badge/Cloud%20Savings-55%25--60%25-green?style=flat&logo=googlecloud)  
+![Break-even](https://img.shields.io/badge/Break--Even-2200%20Students-blue?style=flat&logo=github)  
+![Tech Stack](https://img.shields.io/badge/Tech-Unity%20%7C%20GitHub%20%7C%20Google%20Drive%20%7C%20AWS-orange?style=flat&logo=unity)  
 
-📌 Overview
+---
 
-Traditional cloud storage for VR/AR platforms is expensive and inefficient when scaled across thousands of students.
-RGAC Virtual University introduces a decentralized hybrid storage model that reduces cloud storage costs by 55–60% while maintaining high performance and scalability.
+## 📌 Overview  
 
-Instead of storing all assets on costly cloud servers, we leverage:
+Traditional cloud storage for VR/AR platforms is **expensive and inefficient** when scaled across thousands of students.  
 
-🗄 GitHub private repositories (1 GB/student free) → configs, prefabs, lightweight Unity assets
-📂 Google Drive (15 GB/student free) → student documents (certificates, PDFs, assignments)
-☁️ Cloud platforms (AWS/GCP/Azure) → runtime-heavy assets (3D models, videos, prefabs)
-👉 This hybrid strategy saves lakhs of rupees annually at scale while improving flexibility.
+**RGAC Virtual University** introduces a **decentralized hybrid storage model** that reduces cloud storage costs by **55–60%** while maintaining **high performance and scalability**.  
 
-🛞 How It Works (Tire System Model) :
-    ┌──────────────────────────────┐
+Instead of storing all assets on costly cloud servers, we leverage:  
+
+* 🗄 **GitHub private repositories (1 GB/student free)** → configs, prefabs, lightweight Unity assets  
+* 📂 **Google Drive (15 GB/student free)** → student documents (certificates, PDFs, assignments)  
+* ☁️ **Cloud platforms (AWS/GCP/Azure)** → runtime-heavy assets (3D models, videos, prefabs)  
+
+👉 This **hybrid strategy saves lakhs of rupees annually at scale** while improving flexibility.  
+
+---
+
+## 🛞 How It Works (Tire System Model)  
+
+   ┌──────────────────────────────┐
    │   Outer Rubber (Shell)       │ → Unity configs & scripts → GitHub  
    └──────────────────────────────┘
                  │
@@ -34,42 +44,55 @@ Instead of storing all assets on costly cloud servers, we leverage:
    │   Rotation (Runtime)         │ → VR runs smoothly at reduced storage cost  
    └──────────────────────────────┘
 
-   🔑 Storage Strategy:
-   
-1️⃣ GitHub – Decentralized Asset Storage :
 
-✔️ Each student creates 1 private repo (1 GB free)
-✔️ With 200 students → 200 GB free storage
-✔️ Stores:
-Unity configs (.json, .ini)
-Shell scripts (.sh)
-Prefab metadata & lightweight textures (<100 MB)
-✔️ Access controlled via GitHub API tokens
+---
 
-2️⃣ Google Drive – Student Documents :
+## 🔑 Storage Strategy  
 
-✔️ Each student uses 1 GB from their free 15 GB quota
-✔️ Stores: PDFs, certificates, assignments
-✔️ LMS keeps links only, not files
-✔️ Teacher → Click link → Opens securely in Drive
-✔️ Security handled by Google (encryption + access control)
+### 1️⃣ GitHub – Decentralized Asset Storage  
 
-3️⃣ Cloud – Runtime Performance : 
+✔️ Each student creates **1 private repo (1 GB free)**  
+✔️ With **200 students → 200 GB free storage**  
+✔️ Stores:  
+* Unity configs (`.json`, `.ini`)  
+* Shell scripts (`.sh`)  
+* Prefab metadata & lightweight textures (<100 MB)  
+✔️ Access controlled via **GitHub API tokens**  
 
-✔️ Large runtime assets stored in cloud:
-Full 3D models
-VR videos
-Heavy prefabs
-✔️ Ensures speed + scalability
+---
 
-📊 Cost Comparison :
+### 2️⃣ Google Drive – Student Documents  
+
+✔️ Each student uses **1 GB from their free 15 GB quota**  
+✔️ Stores: PDFs, certificates, assignments  
+✔️ LMS keeps **links only**, not files  
+✔️ Teacher → Click link → Opens securely in Drive  
+✔️ Security handled by Google (encryption + access control)  
+
+---
+
+### 3️⃣ Cloud – Runtime Performance  
+
+✔️ Large runtime assets stored in cloud:  
+* Full 3D models  
+* VR videos  
+* Heavy prefabs  
+✔️ Ensures **speed + scalability**  
+
+---
+
+## 📊 Cost Comparison  
 
 | Model          | Storage | Bandwidth (Monthly) | Annual Cost       |
 | -------------- | ------- | ------------------- | ----------------- |
 | **Cloud-Only** | 250 GB  | 320 GB              | ₹36,000 – ₹39,000 |
 | **Hybrid**     | 50 GB   | 150 GB              | ₹14,400 – ₹16,800 |
 
-📈 Scalability & Break-Even :
+👉 **Savings: ~55–60% (₹21,600/year at 200 students)**  
+
+---
+
+## 📈 Scalability & Break-Even  
 
 | Students | Cloud-Only Cost | Hybrid Cost | Saving %                      |
 | -------- | --------------- | ----------- | ----------------------------- |
@@ -79,34 +102,45 @@ Heavy prefabs
 | 5,000    | ₹9,00,000       | ₹4,10,000   | ✅ 55% Cheaper                 |
 | 10,000   | ₹18,00,000      | ₹7,20,000   | ✅ 60% Cheaper                 |
 
-📍 Break-even point ≈ 2,200 students
-Below → Cloud-only cheaper
-Above → Hybrid model saves ₹10+ Lakhs/year
+📍 **Break-even point ≈ 2,200 students**  
 
-✅ Benefits : 
+* Below → Cloud-only cheaper  
+* Above → Hybrid model saves **₹10+ Lakhs/year**  
 
-✔️ Cost Efficiency → Save up to 60% in cloud costs
-✔️ Scalability → Works better with 2,500+ students
-✔️ Security → GitHub private repos + Google Drive encryption
-✔️ Flexibility → Students manage their own repos & docs
-✔️ Performance → Cloud still handles runtime-heavy assets
+---
 
-⚠️ Risks & Mitigation:
+## ✅ Benefits  
 
-🔒 Drive link privacy issues → LMS alerts if link broken
-📉 Account suspension (rare) → Students keep backups
-💰 Overhead cost (~₹1.1 Lakh/year) → Mitigate with DevOps automation (~₹50k/year)
+✔️ **Cost Efficiency** → Save up to **60%** in cloud costs  
+✔️ **Scalability** → Works better with 2,500+ students  
+✔️ **Security** → GitHub private repos + Google Drive encryption  
+✔️ **Flexibility** → Students manage their own repos & docs  
+✔️ **Performance** → Cloud still handles runtime-heavy assets  
 
-🚀 Future Optimizations:
+---
 
-🤖 DevOps Automation → Reduce operational overhead
-🔐 Quantum Encryption → For GitHub + Cloud data security
-🔗 Dynamic QR Codes → For secure doc & VR simulation access
+## ⚠️ Risks & Mitigation  
 
-📜 License
+* 🔒 **Drive link privacy issues** → LMS alerts if link broken  
+* 📉 **Account suspension (rare)** → Students keep backups  
+* 💰 **Overhead cost (~₹1.1 Lakh/year)** → Mitigate with DevOps automation (~₹50k/year)  
 
-Maintained by RGAC Virtual University
-All rights reserved © 2025
+---
 
+## 🚀 Future Optimizations  
 
+* 🤖 **DevOps Automation** → Reduce operational overhead  
+* 🔐 **Quantum Encryption** → For GitHub + Cloud data security  
+* 🔗 **Dynamic QR Codes** → For secure doc & VR simulation access  
 
+---
+
+## 📜 License  
+
+Maintained by **RGAC Virtual University**  
+All rights reserved © 2025  
+
+---
+
+🔥 **Summary:**  
+With this **Hybrid Storage Model**, RGAC Virtual University can deliver **affordable, scalable, and secure VR education** worldwide — saving **55–60% in cloud costs** once scaled beyond **2,500 students**.  
