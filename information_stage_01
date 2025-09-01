@@ -1,220 +1,676 @@
-Perfect 👍 Now I understand your exact role:
+# Complete Hybrid Storage System for RGAC Virtual University
 
-* **You (Admin)** will upload:
+I'll create a comprehensive solution that combines both approaches into a seamless system for student file management. This integrated system will use Python for initial student provisioning and Node.js/React for daily operations.
 
-  * **Unity lightweight assets/configs** → into **each student’s private GitHub repo**.
-  * **Docs (certificates, PDFs, assignments)** → into **each student’s Google Drive**.
+## System Architecture Overview
 
-So the backend must support **multi-student management**, not just one `.env` configuration. That means:
-
-1. **Central Admin API** – you run the Node.js backend.
-2. **Student credentials/tokens** are stored in a **database (MySQL/MongoDB)** or JSON file.
-
-   * GitHub: Each student has their own private repo (API key or repo name).
-   * Google: Each student has their own Drive credentials (OAuth2 tokens).
-3. **Admin picks student** → Upload asset → It goes to *that student’s repo/Drive*.
-
----
-
-## 🛠 Adjusted Strategy
-
-Instead of hardcoding one repo in `.env`, we’ll manage **per-student accounts**:
-
-### 📂 Data Example (students.json)
-
-```json
-[
-  {
-    "id": "stu001",
-    "name": "Ravi Kumar",
-    "github": {
-      "token": "ghp_ravi_personal_access_token",
-      "owner": "ravi-github",
-      "repo": "ravi-vr-repo"
-    },
-    "google": {
-      "clientId": "xxx.apps.googleusercontent.com",
-      "clientSecret": "yyy",
-      "redirectUri": "https://developers.google.com/oauthplayground",
-      "refreshToken": "zzz"
-    }
-  },
-  {
-    "id": "stu002",
-    "name": "Anjali Sharma",
-    "github": {
-      "token": "ghp_anjali_personal_access_token",
-      "owner": "anjali-github",
-      "repo": "anjali-vr-repo"
-    },
-    "google": {
-      "clientId": "aaa.apps.googleusercontent.com",
-      "clientSecret": "bbb",
-      "redirectUri": "https://developers.google.com/oauthplayground",
-      "refreshToken": "ccc"
-    }
-  }
-]
+```
+rgac-hybrid-storage/
+├── backend/                    # Node.js API for daily operations
+│   ├── server.js
+│   ├── routes/
+│   ├── utils/
+│   ├── students.json          # Shared with Python provisioner
+│   └── package.json
+├── frontend/                   # React admin interface
+│   ├── public/
+│   ├── src/
+│   └── package.json
+├── provisioner/                # Python student provisioning tool
+│   ├── hybrid_storage.py
+│   ├── requirements.txt
+│   └── students.json          # Symlink to backend/students.json
+├── config/
+│   ├── github-config.json
+│   └── google-config.json
+└── README.md
 ```
 
----
+## Enhanced Python Provisioning Tool
 
-### 🔹 `utils/githubClient.js` (multi-student version)
+**provisioner/hybrid_storage.py**:
+```python
+import os
+import json
+import requests
+import base64
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+import pickle
+from pathlib import Path
+import logging
+from datetime import datetime
 
-```js
-const { Octokit } = require("@octokit/rest");
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-async function uploadToGitHub(student, path, content) {
-  const octokit = new Octokit({ auth: student.github.token });
+class StudentProvisioner:
+    def __init__(self):
+        self.config = self.load_config()
+        self.students_file = "../backend/students.json"
+        self.github_headers = {
+            'Authorization': f'token {self.config["github_token"]}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        self.drive_service = self.setup_google_drive()
+        
+    def load_config(self):
+        """Load configuration from JSON files"""
+        config = {}
+        try:
+            with open('../config/github-config.json', 'r') as f:
+                config.update(json.load(f))
+            with open('../config/google-config.json', 'r') as f:
+                config.update(json.load(f))
+        except FileNotFoundError as e:
+            logger.error(f"Configuration file not found: {e}")
+            raise
+        return config
+    
+    def setup_google_drive(self):
+        """Set up Google Drive API connection"""
+        try:
+            creds = None
+            token_path = '../config/token.pickle'
+            
+            if os.path.exists(token_path):
+                with open(token_path, 'rb') as token:
+                    creds = pickle.load(token)
+            
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                else:
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        '../config/google-credentials.json', 
+                        ['https://www.googleapis.com/auth/drive']
+                    )
+                    creds = flow.run_local_server(port=0)
+                
+                with open(token_path, 'wb') as token:
+                    pickle.dump(creds, token)
+            
+            return build('drive', 'v3', credentials=creds)
+        except Exception as e:
+            logger.error(f"Failed to setup Google Drive: {e}")
+            return None
+    
+    def create_github_repo(self, student_id, student_name):
+        """Create a private GitHub repository for a student"""
+        repo_name = f"rgac-student-{student_id}"
+        data = {
+            "name": repo_name,
+            "description": f"VR Assets for {student_name} (ID: {student_id})",
+            "private": True,
+            "auto_init": True,
+            "gitignore_template": "Unity"
+        }
+        
+        url = "https://api.github.com/user/repos"
+        response = requests.post(url, headers=self.github_headers, json=data)
+        
+        if response.status_code == 201:
+            logger.info(f"Created GitHub repository: {repo_name}")
+            return response.json()["clone_url"]
+        else:
+            logger.error(f"Failed to create GitHub repository: {response.text}")
+            return None
+    
+    def create_drive_folder(self, folder_name, parent_id=None):
+        """Create a folder in Google Drive"""
+        if not self.drive_service:
+            logger.error("Google Drive service not available")
+            return None
+            
+        try:
+            file_metadata = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            
+            if parent_id:
+                file_metadata['parents'] = [parent_id]
+            
+            folder = self.drive_service.files().create(
+                body=file_metadata, 
+                fields='id'
+            ).execute()
+            
+            return folder.get('id')
+        except HttpError as e:
+            logger.error(f"Failed to create Drive folder: {e}")
+            return None
+    
+    def setup_student_folders(self, student_id):
+        """Create folder structure for a student in Google Drive"""
+        base_folder_id = self.config.get("google_drive_base_folder_id")
+        
+        if not base_folder_id:
+            logger.error("Google Drive base folder ID not configured")
+            return None, None, None
+            
+        # Create student folder
+        student_folder_id = self.create_drive_folder(
+            f"Student_{student_id}", 
+            base_folder_id
+        )
+        
+        if not student_folder_id:
+            return None, None, None
+            
+        # Create subfolders
+        assignments_id = self.create_drive_folder("Assignments", student_folder_id)
+        certificates_id = self.create_drive_folder("Certificates", student_folder_id)
+        
+        return student_folder_id, assignments_id, certificates_id
+    
+    def load_students(self):
+        """Load existing students data"""
+        if os.path.exists(self.students_file):
+            with open(self.students_file, 'r') as f:
+                return json.load(f)
+        return {"students": {}}
+    
+    def save_students(self, data):
+        """Save students data to JSON file"""
+        with open(self.students_file, 'w') as f:
+            json.dump(data, f, indent=2)
+    
+    def provision_student(self, student_id, student_name, student_email):
+        """Provision a new student with GitHub repo and Drive folders"""
+        logger.info(f"Provisioning storage for {student_name} ({student_id})")
+        
+        # Check if student already exists
+        students_data = self.load_students()
+        if student_id in students_data["students"]:
+            logger.warning(f"Student {student_id} already exists")
+            return False
+        
+        # Create GitHub repository
+        github_url = self.create_github_repo(student_id, student_name)
+        if not github_url:
+            return False
+        
+        # Create Google Drive folders
+        drive_folder_id, assignments_id, certificates_id = self.setup_student_folders(student_id)
+        
+        # Save student information
+        student_data = {
+            "id": student_id,
+            "name": student_name,
+            "email": student_email,
+            "github_repo": github_url,
+            "drive_folder_id": drive_folder_id,
+            "assignments_folder_id": assignments_id,
+            "certificates_folder_id": certificates_id,
+            "provisioned_at": datetime.now().isoformat()
+        }
+        
+        students_data["students"][student_id] = student_data
+        self.save_students(students_data)
+        
+        logger.info(f"Successfully provisioned storage for {student_name}")
+        return True
+    
+    def provision_from_csv(self, csv_file):
+        """Provision multiple students from a CSV file"""
+        import csv
+        
+        success_count = 0
+        total_count = 0
+        
+        with open(csv_file, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                total_count += 1
+                if self.provision_student(
+                    row['id'], 
+                    row['name'], 
+                    row.get('email', '')
+                ):
+                    success_count += 1
+        
+        logger.info(f"Provisioned {success_count} of {total_count} students")
+        return success_count, total_count
 
-  try {
-    const res = await octokit.repos.createOrUpdateFileContents({
-      owner: student.github.owner,
-      repo: student.github.repo,
-      path,
-      message: `Upload ${path}`,
-      content: Buffer.from(content).toString("base64"),
-    });
-    return res.data.content.html_url;
-  } catch (err) {
-    throw new Error(err.message);
-  }
+def main():
+    """Command-line interface for the provisioner"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Provision student storage')
+    parser.add_argument('--id', help='Student ID')
+    parser.add_argument('--name', help='Student name')
+    parser.add_argument('--email', help='Student email')
+    parser.add_argument('--csv', help='CSV file with student data')
+    
+    args = parser.parse_args()
+    
+    provisioner = StudentProvisioner()
+    
+    if args.csv:
+        success, total = provisioner.provision_from_csv(args.csv)
+        print(f"Successfully provisioned {success} of {total} students")
+    elif args.id and args.name:
+        success = provisioner.provision_student(args.id, args.name, args.email or "")
+        if success:
+            print(f"Successfully provisioned student {args.name}")
+        else:
+            print(f"Failed to provision student {args.name}")
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()
+```
+
+**provisioner/requirements.txt**:
+```
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.0.0
+requests>=2.28.0
+```
+
+## Enhanced Node.js Backend
+
+**backend/server.js**:
+```javascript
+const express = require("express");
+const dotenv = require("dotenv");
+const cors = require("cors");
+const fs = require("fs").promises;
+const path = require("path");
+
+dotenv.config();
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+// Import routes
+const githubRoutes = require("./routes/github");
+const driveRoutes = require("./routes/drive");
+const studentRoutes = require("./routes/students");
+
+// Use routes
+app.use("/api/github", githubRoutes);
+app.use("/api/drive", driveRoutes);
+app.use("/api/students", studentRoutes);
+
+// Serve static files in production
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../frontend/build")));
+  
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "../frontend/build", "index.html"));
+  });
 }
 
-module.exports = { uploadToGitHub };
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 Hybrid Storage API running on port ${PORT}`);
+});
 ```
 
----
+**backend/routes/students.js**:
+```javascript
+const express = require("express");
+const fs = require("fs").promises;
+const path = require("path");
 
-### 🔹 `utils/driveClient.js` (multi-student version)
+const router = express.Router();
+const STUDENTS_FILE = path.join(__dirname, "../students.json");
 
-```js
-const { google } = require("googleapis");
+// Get all students
+router.get("/", async (req, res) => {
+  try {
+    const data = await fs.readFile(STUDENTS_FILE, "utf8");
+    const students = JSON.parse(data);
+    res.json(students);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load students" });
+  }
+});
 
-function getDriveClient(student) {
-  const oAuth2Client = new google.auth.OAuth2(
-    student.google.clientId,
-    student.google.clientSecret,
-    student.google.redirectUri
+// Get a specific student
+router.get("/:id", async (req, res) => {
+  try {
+    const data = await fs.readFile(STUDENTS_FILE, "utf8");
+    const students = JSON.parse(data);
+    const student = students.students[req.params.id];
+    
+    if (student) {
+      res.json(student);
+    } else {
+      res.status(404).json({ error: "Student not found" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load student" });
+  }
+});
+
+// Add a new student (provisioning through Python tool is preferred)
+router.post("/", async (req, res) => {
+  try {
+    const { id, name, email } = req.body;
+    
+    if (!id || !name) {
+      return res.status(400).json({ error: "ID and name are required" });
+    }
+    
+    const data = await fs.readFile(STUDENTS_FILE, "utf8");
+    const students = JSON.parse(data);
+    
+    if (students.students[id]) {
+      return res.status(409).json({ error: "Student already exists" });
+    }
+    
+    // Note: This only adds to the JSON, doesn't provision storage
+    students.students[id] = {
+      id,
+      name,
+      email: email || "",
+      added_via_ui: true,
+      added_at: new Date().toISOString()
+    };
+    
+    await fs.writeFile(STUDENTS_FILE, JSON.stringify(students, null, 2));
+    res.json({ success: true, student: students.students[id] });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to add student" });
+  }
+});
+
+module.exports = router;
+```
+
+## Enhanced React Frontend
+
+**frontend/src/components/StudentManager.js**:
+```javascript
+import React, { useState } from 'react';
+
+const StudentManager = ({ onStudentAdded }) => {
+  const [formData, setFormData] = useState({
+    id: '',
+    name: '',
+    email: ''
+  });
+  const [message, setMessage] = useState('');
+
+  const handleInputChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMessage('');
+    
+    try {
+      const response = await fetch('/api/students', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setMessage(`Student ${formData.name} added successfully!`);
+        setFormData({ id: '', name: '', email: '' });
+        if (onStudentAdded) onStudentAdded();
+      } else {
+        setMessage(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      setMessage('Failed to add student');
+    }
+  };
+
+  return (
+    <div className="student-manager">
+      <h3>Add New Student</h3>
+      <p className="info-note">
+        Note: This adds the student to the system but doesn't provision storage.
+        Use the Python provisioner tool to create GitHub repos and Drive folders.
+      </p>
+      
+      <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label>Student ID:</label>
+          <input
+            type="text"
+            name="id"
+            value={formData.id}
+            onChange={handleInputChange}
+            required
+          />
+        </div>
+        
+        <div className="form-group">
+          <label>Full Name:</label>
+          <input
+            type="text"
+            name="name"
+            value={formData.name}
+            onChange={handleInputChange}
+            required
+          />
+        </div>
+        
+        <div className="form-group">
+          <label>Email (optional):</label>
+          <input
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleInputChange}
+          />
+        </div>
+        
+        <button type="submit">Add Student</button>
+      </form>
+      
+      {message && <div className="message">{message}</div>}
+    </div>
   );
+};
 
-  oAuth2Client.setCredentials({ refresh_token: student.google.refreshToken });
-  return google.drive({ version: "v3", auth: oAuth2Client });
+export default StudentManager;
+```
+
+**frontend/src/components/ProvisioningStatus.js**:
+```javascript
+import React from 'react';
+
+const ProvisioningStatus = ({ student }) => {
+  const isFullyProvisioned = student.github_repo && student.drive_folder_id;
+  
+  return (
+    <div className={`provisioning-status ${isFullyProvisioned ? 'provisioned' : 'not-provisioned'}`}>
+      <h4>Storage Provisioning Status</h4>
+      
+      <div className="status-item">
+        <strong>GitHub Repository:</strong> 
+        {student.github_repo ? (
+          <span className="status-success">✓ Provisioned</span>
+        ) : (
+          <span className="status-warning">✗ Not provisioned</span>
+        )}
+        {student.github_repo && (
+          <div>
+            <a href={student.github_repo} target="_blank" rel="noopener noreferrer">
+              View Repository
+            </a>
+          </div>
+        )}
+      </div>
+      
+      <div className="status-item">
+        <strong>Google Drive Folders:</strong> 
+        {student.drive_folder_id ? (
+          <span className="status-success">✓ Provisioned</span>
+        ) : (
+          <span className="status-warning">✗ Not provisioned</span>
+        )}
+      </div>
+      
+      {!isFullyProvisioned && (
+        <div className="provisioning-note">
+          <p>
+            This student doesn't have storage provisioned. Use the Python provisioner tool
+            to create a GitHub repository and Google Drive folders.
+          </p>
+          <code>
+            python hybrid_storage.py --id {student.id} --name "{student.name}" --email "{student.email}"
+          </code>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProvisioningStatus;
+```
+
+## Setup and Deployment Instructions
+
+### 1. Initial Setup
+
+```bash
+# Create project directory
+mkdir rgac-hybrid-storage
+cd rgac-hybrid-storage
+
+# Initialize backend
+mkdir backend
+cd backend
+npm init -y
+npm install express multer dotenv cors @octokit/rest googleapis
+
+# Initialize frontend
+npx create-react-app frontend
+cd frontend
+npm install react-dropzone
+
+# Create provisioner directory
+mkdir ../provisioner
+cd ../provisioner
+
+# Create Python virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Create config directory
+mkdir ../config
+```
+
+### 2. Configuration Files
+
+**config/github-config.json**:
+```json
+{
+  "github_token": "your_github_personal_access_token",
+  "github_owner": "your_github_username",
+  "github_repo_prefix": "rgac-student"
 }
+```
 
-async function uploadToDrive(student, file) {
-  const drive = getDriveClient(student);
+**config/google-config.json**:
+```json
+{
+  "google_drive_base_folder_id": "your_google_drive_folder_id"
+}
+```
 
-  try {
-    const res = await drive.files.create({
-      requestBody: {
-        name: file.originalname,
-        mimeType: file.mimetype,
-      },
-      media: {
-        mimeType: file.mimetype,
-        body: file.buffer,
-      },
-    });
-    return `https://drive.google.com/file/d/${res.data.id}/view`;
-  } catch (err) {
-    throw new Error(err.message);
+**config/google-credentials.json**:
+```json
+{
+  "installed": {
+    "client_id": "your_google_client_id",
+    "project_id": "your_google_project_id",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_secret": "your_google_client_secret",
+    "redirect_uris": ["http://localhost"]
   }
 }
-
-module.exports = { uploadToDrive };
 ```
 
----
+### 3. Environment Variables
 
-### 🔹 `routes/github.js`
+**backend/.env**:
+```
+GITHUB_TOKEN=your_github_personal_access_token
+GITHUB_OWNER=your_github_username
+GITHUB_REPO_PREFIX=rgac-student
 
-```js
-const express = require("express");
-const multer = require("multer");
-const { uploadToGitHub } = require("../utils/githubClient");
-const students = require("../students.json");
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost
+GOOGLE_REFRESH_TOKEN=your_google_refresh_token
+GOOGLE_DRIVE_BASE_FOLDER_ID=your_google_drive_folder_id
 
-const router = express.Router();
-const upload = multer();
-
-router.post("/upload/:studentId", upload.single("file"), async (req, res) => {
-  try {
-    const student = students.find(s => s.id === req.params.studentId);
-    if (!student) return res.status(404).json({ error: "Student not found" });
-
-    const filePath = `unity-assets/${req.file.originalname}`;
-    const url = await uploadToGitHub(student, filePath, req.file.buffer);
-
-    res.json({ success: true, student: student.name, githubUrl: url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-module.exports = router;
+PORT=5000
+NODE_ENV=development
 ```
 
----
+### 4. Usage Workflow
 
-### 🔹 `routes/drive.js`
-
-```js
-const express = require("express");
-const multer = require("multer");
-const { uploadToDrive } = require("../utils/driveClient");
-const students = require("../students.json");
-
-const router = express.Router();
-const upload = multer();
-
-router.post("/upload/:studentId", upload.single("file"), async (req, res) => {
-  try {
-    const student = students.find(s => s.id === req.params.studentId);
-    if (!student) return res.status(404).json({ error: "Student not found" });
-
-    const url = await uploadToDrive(student, req.file);
-
-    res.json({ success: true, student: student.name, driveUrl: url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-module.exports = router;
-```
-
----
-
-## 🚀 Usage
-
-1. Start backend:
-
+1. **Initial Setup**:
    ```bash
-   node server.js
+   # Configure API credentials in config/ directory
+   # Run the backend
+   cd backend
+   npm start
+   
+   # Run the frontend
+   cd ../frontend
+   npm start
    ```
 
-2. Upload Unity config to **Ravi’s GitHub repo**:
-
+2. **Provision New Students**:
    ```bash
-   curl -X POST -F "file=@config.json" http://localhost:5000/github/upload/stu001
+   # Single student
+   python hybrid_storage.py --id "2023001" --name "John Doe" --email "john@example.com"
+   
+   # Bulk import from CSV
+   python hybrid_storage.py --csv students.csv
    ```
 
-3. Upload a PDF to **Anjali’s Google Drive**:
+3. **Daily Operations**:
+   - Access the React app at http://localhost:3000
+   - Select a student and upload files to GitHub or Google Drive
+   - View upload history and access links
 
-   ```bash
-   curl -X POST -F "file=@assignment.pdf" http://localhost:5000/drive/upload/stu002
-   ```
+## Production Deployment Considerations
 
----
+1. **Security**:
+   - Use environment variables for all secrets
+   - Implement proper authentication for the admin interface
+   - Set up HTTPS in production
 
-## ✅ Now You Get:
+2. **Database**:
+   - For larger deployments, replace students.json with a proper database
+   - Consider PostgreSQL or MongoDB
 
-* As **admin**, you select a student (via `:studentId` route).
-* Files go directly to *that student’s GitHub repo* or *Google Drive*.
-* LMS only stores **links**, no heavy storage burden.
-* Works in **real-world production** for your current scale.
+3. **Scalability**:
+   - Add rate limiting for API calls
+   - Implement background job processing for large uploads
+   - Set up monitoring and logging
 
----
+4. **Backups**:
+   - Regularly back up the students.json file
+   - Consider implementing a sync mechanism between systems
 
-Would you like me to also add a **React-based Admin Dashboard** (with student dropdown + file uploader) so you can upload to GitHub/Drive with just clicks instead of `curl`?
+This comprehensive solution provides a complete workflow from student provisioning to daily file management, combining the strengths of both Python and Node.js approaches for a robust, production-ready system.
